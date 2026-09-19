@@ -1,6 +1,6 @@
 # formula
 
-Deterministic compliance artifact generation pipeline.
+Seven compliance artifacts from one input. Same data in, same files out, every run. Sections requiring judgment are marked `[DATA NEEDED]` — that boundary is the product.
 
 ```bash
 go get github.com/Formulary-Labs/formula
@@ -10,7 +10,7 @@ go get github.com/Formulary-Labs/formula
 
 `formula` generates seven structured compliance artifacts from a `ProgramState` JSON and an optional gemara `ControlCatalog`. It fills every section where the content can be derived from the input data. Sections that require prose judgment — risk narratives, scope descriptions, management review content — are left as `[DATA NEEDED: narrative]` placeholders for the agent layer to complete.
 
-Same inputs produce the same outputs on every run. No randomness, no inference, no generation of content that isn't traceable to the input.
+No randomness, no inference, no content that isn't traceable to the input.
 
 ## Usage
 
