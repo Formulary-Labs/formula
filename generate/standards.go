@@ -1,70 +1,135 @@
+// Package generate — standards.go provides gemara-native framework
+// configuration for formula. Framework definitions come from gemara
+// ControlCatalog artifacts. Artifact selection sets are encoded in Go keyed
+// by normalized versions of the catalog's metadata.id field.
 package generate
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/Formulary-Labs/substrate/artifact"
 )
 
-// StandardConfig is the schema for a per-framework artifact selection config.
-// Config files are JSON, named {framework}.json, and live in StandardsDir.
-// They are not embedded in the binary — they come from gemara layer 1 artifacts
-// or operator-managed config directories.
+// frameworkArtifactSets maps normalized gemara catalog IDs (metadata.id) to
+// the artifact types formula should generate for that framework. Keyed by
+// lower-cased, normalized versions of common catalog IDs.
 //
-// Example file at standards/my-framework.json:
-//
-//	{
-//	  "id": "my-framework",
-//	  "artifacts": ["soa", "risk", "evidence-registry", "xlsx"]
-//	}
-type StandardConfig struct {
-	ID        string   `json:"id"`
-	Artifacts []string `json:"artifacts"`
+// ISO 42001 includes system-card (AI management system standard).
+// IEC 62443 omits system-card (OT/ICS, not AI context).
+var frameworkArtifactSets = map[string][]ArtifactType{
+	// ISO 27001 variants
+	"iso27001":      {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"iso-27001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"iso_27001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	// ISO 42001 variants
+	"iso42001":      {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	"iso-42001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	"iso_42001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	// IEC 62443 variants
+	"iec62443":      {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"iec-62443":     {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"iec_62443":     {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	// SOC 2 variants
+	"soc2":          {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"soc-2":         {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"soc 2":         {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	// NIST 800-53 variants
+	"nist800-53":    {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"nist-800-53":   {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"nist_800_53":   {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	// FedRAMP / FINOS CCC variants
+	"fedramp":       {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"finos-ccc":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
 }
 
-// LoadStandardConfig reads the artifact list for the given framework from dir.
-// It looks for {dir}/{framework}.json (case-insensitive filename match).
+// normalizeFrameworkID lowercases and strips common separators to provide a
+// consistent lookup key from arbitrary catalog metadata IDs.
+func normalizeFrameworkID(id string) string {
+	return strings.ToLower(strings.TrimSpace(id))
+}
+
+// ArtifactsFromCatalog loads a gemara ControlCatalog and returns:
+//   - the recommended artifact set for its framework (from metadata.id)
+//   - the parsed catalog for downstream use by ControlsFromCatalog
 //
-// Returns (nil, nil) when no config file exists for the framework — the caller
-// should fall back to AllArtifactTypes. Returns a non-nil error only when a
-// config file is found but cannot be parsed.
-func LoadStandardConfig(framework, dir string) ([]ArtifactType, error) {
-	if framework == "" || dir == "" {
-		return nil, nil
+// Returns (nil, nil, nil) when catalogPath is empty.
+// Unknown framework IDs fall back to AllArtifactTypes.
+func ArtifactsFromCatalog(catalogPath string) ([]ArtifactType, *artifact.ControlCatalog, error) {
+	if catalogPath == "" {
+		return nil, nil, nil
 	}
 
-	// Try exact filename first, then lowercase.
-	candidates := []string{
-		filepath.Join(dir, framework+".json"),
-		filepath.Join(dir, strings.ToLower(framework)+".json"),
+	cat, err := artifact.LoadControlCatalog(catalogPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("loading catalog %q: %w", catalogPath, err)
 	}
 
-	var data []byte
-	var readErr error
-	for _, path := range candidates {
-		data, readErr = os.ReadFile(path)
-		if readErr == nil {
-			break
+	// Framework is identified by the catalog's metadata.id.
+	// Metadata is a value type — always accessible.
+	normalized := normalizeFrameworkID(cat.Metadata.Id)
+	set, ok := frameworkArtifactSets[normalized]
+	if !ok {
+		// Unknown or missing framework ID — generate everything safe.
+		return AllArtifactTypes, cat, nil
+	}
+	return set, cat, nil
+}
+
+// ControlsFromCatalog converts a gemara ControlCatalog into the ControlEntry
+// slice that formula's pipeline generators consume.
+//
+// Catalog controls are the authoritative list. Each control's family is derived
+// from its group reference resolved against the catalog's groups. Controls from
+// the existing program state are merged in to provide determinations, owners,
+// and evidence refs. Program state controls not present in the catalog are
+// appended after catalog controls.
+func ControlsFromCatalog(cat *artifact.ControlCatalog, existing []ControlEntry) []ControlEntry {
+	if cat == nil {
+		return existing
+	}
+
+	// Build a group ID → title lookup for family resolution.
+	groupTitles := make(map[string]string, len(cat.Groups))
+	for _, g := range cat.Groups {
+		groupTitles[g.Id] = g.Title
+	}
+
+	// Index existing program state by control ID for overlay.
+	lookup := make(map[string]ControlEntry, len(existing))
+	for _, c := range existing {
+		lookup[c.ID] = c
+	}
+
+	var out []ControlEntry
+	for _, ctrl := range cat.Controls {
+		entry := ControlEntry{
+			ID:     ctrl.Id,
+			Title:  ctrl.Title,
+			Family: groupTitles[ctrl.Group], // resolve group ID → title
 		}
-		if !errors.Is(readErr, os.ErrNotExist) {
-			return nil, fmt.Errorf("reading standards config %q: %w", path, readErr)
+		// Overlay program-specific data where available.
+		if ex, ok := lookup[ctrl.Id]; ok {
+			entry.Determination          = ex.Determination
+			entry.Implementation         = ex.Implementation
+			entry.Owner                  = ex.Owner
+			entry.EvidenceRef            = ex.EvidenceRef
+			entry.Inherited              = ex.Inherited
+			entry.InheritedFrom          = ex.InheritedFrom
+			entry.Excluded               = ex.Excluded
+			entry.ExclusionJustification = ex.ExclusionJustification
+			entry.RiskScore              = ex.RiskScore
+			entry.Dependencies           = ex.Dependencies
+			entry.ReviewCadence          = ex.ReviewCadence
+			delete(lookup, ctrl.Id)
 		}
-	}
-	if data == nil {
-		return nil, nil // no config file found — not an error
+		out = append(out, entry)
 	}
 
-	var sc StandardConfig
-	if err := json.Unmarshal(data, &sc); err != nil {
-		return nil, fmt.Errorf("parsing standards config for %q: %w", framework, err)
+	// Append program state entries not present in the catalog.
+	for id := range lookup {
+		out = append(out, lookup[id])
 	}
 
-	artifacts := make([]ArtifactType, 0, len(sc.Artifacts))
-	for _, a := range sc.Artifacts {
-		artifacts = append(artifacts, ArtifactType(a))
-	}
-	return artifacts, nil
+	return out
 }

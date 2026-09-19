@@ -51,12 +51,11 @@ var AllArtifactTypes = []ArtifactType{
 
 // PipelineConfig configures a formula run.
 type PipelineConfig struct {
-	Program      string         `json:"program"`
-	Framework    string         `json:"framework"`
-	OutputDir    string         `json:"output_dir"`
-	Artifacts    []ArtifactType `json:"artifacts,omitempty"` // empty = standard config or all
-	StandardsDir string         `json:"standards_dir,omitempty"` // directory containing per-framework JSON configs
-	DryRun       bool           `json:"dry_run,omitempty"`
+	Program   string         `json:"program"`
+	Framework string         `json:"framework"`
+	OutputDir string         `json:"output_dir"`
+	Artifacts []ArtifactType `json:"artifacts,omitempty"` // empty = all
+	DryRun    bool           `json:"dry_run,omitempty"`
 }
 
 // ControlEntry represents a single control from a catalog or assessment.
@@ -131,15 +130,10 @@ type ArtifactResult struct {
 func RunPipeline(cfg PipelineConfig, ps *ProgramState) []ArtifactResult {
 	artifacts := cfg.Artifacts
 	if len(artifacts) == 0 {
-		// Try to load a per-framework config from StandardsDir; fall back to all types.
-		if cfg.StandardsDir != "" && cfg.Framework != "" {
-			if sc, err := LoadStandardConfig(cfg.Framework, cfg.StandardsDir); sc != nil && err == nil {
-				artifacts = sc
-			}
-		}
-		if len(artifacts) == 0 {
-			artifacts = AllArtifactTypes
-		}
+		// No explicit artifact list: default to generating all types.
+		// Callers that have a gemara catalog should call ArtifactsFromCatalog
+		// before RunPipeline and pass the result in cfg.Artifacts.
+		artifacts = AllArtifactTypes
 	}
 
 	// Separate XLSX from other artifacts.
@@ -220,8 +214,9 @@ func generateSOA(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
 	return writeCSV(cfg, SOA, "soa.csv", rows)
 }
 
-// soaStatusLabel maps a control's implementation/inherited/excluded fields to
+// soaStatusLabel maps a control's determination/inherited/excluded fields to
 // the audit-readable status label used in the psc-ms taxonomy.
+// Status is based on Determination, not presence of Implementation text.
 func soaStatusLabel(c ControlEntry) string {
 	if c.Excluded {
 		return "Not Applicable"
@@ -229,16 +224,22 @@ func soaStatusLabel(c ControlEntry) string {
 	if c.Inherited {
 		return "Implemented (Inherited)"
 	}
-	switch strings.ToLower(strings.TrimSpace(c.Implementation)) {
-	case "configurable":
-		return "Implemented (Configurable — operator-dependent)"
-	case "":
-		if strings.ToLower(c.Determination) == "na" || strings.ToLower(c.Determination) == "not_applicable" {
-			return "Not Applicable"
+	switch strings.ToLower(strings.TrimSpace(c.Determination)) {
+	case "na", "not_applicable":
+		return "Not Applicable"
+	case "satisfied":
+		switch strings.ToLower(strings.TrimSpace(c.Implementation)) {
+		case "configurable":
+			return "Implemented (Configurable — operator-dependent)"
+		default:
+			return "Implemented (Native)"
 		}
-		return "Implemented (Native)"
+	case "partially_satisfied":
+		return "Partially Implemented"
+	case "not_satisfied":
+		return "Not Implemented"
 	default:
-		return "Implemented (Native)"
+		return "Pending Assessment"
 	}
 }
 
