@@ -26,6 +26,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Formulary-Labs/substrate/evidence"
 )
 
 // ArtifactType is one of the generated artifact types.
@@ -39,11 +41,12 @@ const (
 	ContextDoc       ArtifactType = "context"
 	CollectiveRisk   ArtifactType = "collective-risk"
 	SystemCard       ArtifactType = "system-card"
+	XLSX             ArtifactType = "xlsx"
 )
 
 // AllArtifactTypes is the full list of artifact types formula can generate.
 var AllArtifactTypes = []ArtifactType{
-	SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard,
+	SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX,
 }
 
 // PipelineConfig configures a formula run.
@@ -51,7 +54,8 @@ type PipelineConfig struct {
 	Program      string         `json:"program"`
 	Framework    string         `json:"framework"`
 	OutputDir    string         `json:"output_dir"`
-	Artifacts    []ArtifactType `json:"artifacts,omitempty"` // empty = all
+	Artifacts    []ArtifactType `json:"artifacts,omitempty"` // empty = standard config or all
+	StandardsDir string         `json:"standards_dir,omitempty"` // directory containing per-framework JSON configs
 	DryRun       bool           `json:"dry_run,omitempty"`
 }
 
@@ -116,19 +120,45 @@ type ArtifactResult struct {
 	Rows       int
 	DryRun     bool
 	Error      error
+	// Data carries the header row and data rows for tabular artifacts so that
+	// AssembleWorkbook can consume them without re-reading the CSV from disk.
+	Data [][]string
 }
 
 // RunPipeline executes the full artifact generation pipeline.
+// XLSX assembly always runs last so it can consume the tabular results from
+// the other generators; requesting only XLSX without tabular artifacts is a no-op.
 func RunPipeline(cfg PipelineConfig, ps *ProgramState) []ArtifactResult {
 	artifacts := cfg.Artifacts
 	if len(artifacts) == 0 {
-		artifacts = AllArtifactTypes
+		// Try to load a per-framework config from StandardsDir; fall back to all types.
+		if cfg.StandardsDir != "" && cfg.Framework != "" {
+			if sc, err := LoadStandardConfig(cfg.Framework, cfg.StandardsDir); sc != nil && err == nil {
+				artifacts = sc
+			}
+		}
+		if len(artifacts) == 0 {
+			artifacts = AllArtifactTypes
+		}
+	}
+
+	// Separate XLSX from other artifacts.
+	needsXLSX := false
+	var nonXLSX []ArtifactType
+	for _, a := range artifacts {
+		if a == XLSX {
+			needsXLSX = true
+		} else {
+			nonXLSX = append(nonXLSX, a)
+		}
 	}
 
 	var results []ArtifactResult
-	for _, a := range artifacts {
-		result := generate(a, cfg, ps)
-		results = append(results, result)
+	for _, a := range nonXLSX {
+		results = append(results, generate(a, cfg, ps))
+	}
+	if needsXLSX {
+		results = append(results, AssembleWorkbook(results, ps, cfg))
 	}
 	return results
 }
@@ -156,7 +186,12 @@ func generate(a ArtifactType, cfg PipelineConfig, ps *ProgramState) ArtifactResu
 
 // generateSOA produces a Statement of Applicability CSV.
 func generateSOA(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
-	headers := []string{"Control ID", "Title", "Family", "In Scope", "Determination", "Implementation Summary", "Owner", "Inherited", "Inherited From", "Evidence Ref", "Exclusion Justification"}
+	headers := []string{
+		"Control ID", "Title", "Family", "In Scope", "Determination",
+		"Implementation Status", "Implementation Summary",
+		"Owner", "Inherited", "Inherited From",
+		"Evidence Source", "Exclusion Justification",
+	}
 	rows := [][]string{headers}
 
 	controls := ps.Controls
@@ -174,13 +209,47 @@ func generateSOA(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
 		rows = append(rows, []string{
 			c.ID, c.Title, c.Family, inScope,
 			coalesceStr(c.Determination, "[PENDING]"),
+			soaStatusLabel(c),
 			truncate(c.Implementation, 200),
 			c.Owner, inherited, c.InheritedFrom,
-			c.EvidenceRef, c.ExclusionJustification,
+			evidenceSource(c.EvidenceRef),
+			c.ExclusionJustification,
 		})
 	}
 
 	return writeCSV(cfg, SOA, "soa.csv", rows)
+}
+
+// soaStatusLabel maps a control's implementation/inherited/excluded fields to
+// the audit-readable status label used in the psc-ms taxonomy.
+func soaStatusLabel(c ControlEntry) string {
+	if c.Excluded {
+		return "Not Applicable"
+	}
+	if c.Inherited {
+		return "Implemented (Inherited)"
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Implementation)) {
+	case "configurable":
+		return "Implemented (Configurable — operator-dependent)"
+	case "":
+		if strings.ToLower(c.Determination) == "na" || strings.ToLower(c.Determination) == "not_applicable" {
+			return "Not Applicable"
+		}
+		return "Implemented (Native)"
+	default:
+		return "Implemented (Native)"
+	}
+}
+
+// evidenceSource returns a prefixed evidence source string using ClassifyLink,
+// e.g. "[GitHub] https://github.com/..." or "[PENDING]".
+func evidenceSource(ref string) string {
+	linkType, isPending := evidence.ClassifyLink(ref)
+	if isPending {
+		return "[PENDING]"
+	}
+	return fmt.Sprintf("[%s] %s", linkType, ref)
 }
 
 // generateRisk produces a Risk Assessment CSV.
@@ -217,16 +286,26 @@ func generateRisk(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
 }
 
 // generateEvidenceRegistry produces an Evidence Registry CSV.
+// Controls with no EvidenceRef emit a PENDING gap row so auditors can see the gap.
 func generateEvidenceRegistry(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
-	headers := []string{"Control ID", "Title", "Owner", "Evidence Ref", "Review Cadence", "Determination"}
+	headers := []string{"Control ID", "Title", "Owner", "Link Type", "Evidence Ref", "Pending", "Review Cadence", "Determination"}
 	rows := [][]string{headers}
 
 	for _, c := range ps.Controls {
 		if c.Excluded {
 			continue
 		}
+		linkType, isPending := evidence.ClassifyLink(c.EvidenceRef)
+		pendingFlag := ""
+		ref := c.EvidenceRef
+		if isPending {
+			pendingFlag = "Yes"
+			ref = "NO LINKS PROVIDED"
+		}
 		rows = append(rows, []string{
-			c.ID, c.Title, c.Owner, c.EvidenceRef, c.ReviewCadence,
+			c.ID, c.Title, c.Owner,
+			linkType, ref, pendingFlag,
+			c.ReviewCadence,
 			coalesceStr(c.Determination, "pending"),
 		})
 	}
@@ -387,7 +466,7 @@ func generateSystemCard(cfg PipelineConfig, ps *ProgramState) ArtifactResult {
 func writeCSV(cfg PipelineConfig, a ArtifactType, filename string, rows [][]string) ArtifactResult {
 	path := filepath.Join(cfg.OutputDir, filename)
 	if cfg.DryRun {
-		return ArtifactResult{Artifact: a, OutputPath: path, Rows: len(rows) - 1, DryRun: true}
+		return ArtifactResult{Artifact: a, OutputPath: path, Rows: len(rows) - 1, DryRun: true, Data: rows}
 	}
 	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
 		return ArtifactResult{Artifact: a, Error: fmt.Errorf("creating output dir: %w", err)}
@@ -401,7 +480,7 @@ func writeCSV(cfg PipelineConfig, a ArtifactType, filename string, rows [][]stri
 	if err := w.WriteAll(rows); err != nil {
 		return ArtifactResult{Artifact: a, Error: fmt.Errorf("writing %s: %w", filename, err)}
 	}
-	return ArtifactResult{Artifact: a, OutputPath: path, Rows: len(rows) - 1}
+	return ArtifactResult{Artifact: a, OutputPath: path, Rows: len(rows) - 1, Data: rows}
 }
 
 func writeFile(dir, filename string, content []byte) error {
