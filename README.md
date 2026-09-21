@@ -88,6 +88,10 @@ Every `[DATA NEEDED: narrative]` placeholder in a `formula` output is a defined 
 
 The agent layer (regimen) fills these placeholders using the program's memory, decisions log, and context. `formula` makes its scope explicit so the division of labor is auditable.
 
+## Catalogs
+
+`formula` can accept a gemara `ControlCatalog` via `--catalog` to derive framework metadata and control titles for artifact generation. See [CATALOGS.md](https://github.com/Formulary-Labs/.github/blob/main/CATALOGS.md) for known upstream catalog sources.
+
 ## Dry run
 
 ```go
