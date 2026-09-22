@@ -75,7 +75,7 @@ func AssembleWorkbook(results []ArtifactResult, ps *ProgramState, cfg PipelineCo
 	if cfg.DryRun {
 		return ArtifactResult{Artifact: XLSX, OutputPath: path, Rows: totalRows, DryRun: true}
 	}
-	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.OutputDir, 0o750); err != nil {
 		return ArtifactResult{Artifact: XLSX, Error: fmt.Errorf("creating output dir: %w", err)}
 	}
 	if err := f.SaveAs(path); err != nil {
@@ -123,8 +123,8 @@ func buildCoverSheet(f *excelize.File, ps *ProgramState, cfg PipelineConfig) err
 		rowNum := i + 3
 		cellA := fmt.Sprintf("A%d", rowNum)
 		cellB := fmt.Sprintf("B%d", rowNum)
-		f.SetCellValue(sheet, cellA, row[0]) //nolint:errcheck
-		f.SetCellValue(sheet, cellB, row[1]) //nolint:errcheck
+		f.SetCellValue(sheet, cellA, row[0])            //nolint:errcheck
+		f.SetCellValue(sheet, cellB, row[1])            //nolint:errcheck
 		f.SetCellStyle(sheet, cellA, cellA, labelStyle) //nolint:errcheck
 	}
 	f.SetColWidth(sheet, "A", "A", 16) //nolint:errcheck

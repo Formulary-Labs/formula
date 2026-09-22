@@ -6,13 +6,13 @@
 // is deterministic — same inputs, same outputs, every run.
 //
 // Artifacts generated:
-//   1. soa.csv             — Statement of Applicability
-//   2. risk.csv            — Risk Assessment CSV (from risk register)
-//   3. evidence-registry.csv — Evidence Registry
-//   4. dependency-map.csv  — Control dependency map
-//   5. context.md          — Compliance Context Document
-//   6. collective-risk.csv — Collective risk register across all controls
-//   7. system-card.md      — AI System Card (ISO 42001 / AI governance programs)
+//  1. soa.csv             — Statement of Applicability
+//  2. risk.csv            — Risk Assessment CSV (from risk register)
+//  3. evidence-registry.csv — Evidence Registry
+//  4. dependency-map.csv  — Control dependency map
+//  5. context.md          — Compliance Context Document
+//  6. collective-risk.csv — Collective risk register across all controls
+//  7. system-card.md      — AI System Card (ISO 42001 / AI governance programs)
 //
 // Standard support: iso42001, iso27001, iec62443.
 package generate
@@ -33,6 +33,7 @@ import (
 // ArtifactType is one of the generated artifact types.
 type ArtifactType string
 
+//nolint:revive // ArtifactType constants are self-documenting string identifiers.
 const (
 	SOA              ArtifactType = "soa"
 	RiskCSV          ArtifactType = "risk"
@@ -60,20 +61,20 @@ type PipelineConfig struct {
 
 // ControlEntry represents a single control from a catalog or assessment.
 type ControlEntry struct {
-	ID             string   `json:"id"`
-	Title          string   `json:"title,omitempty"`
-	Family         string   `json:"family,omitempty"`
-	Determination  string   `json:"determination,omitempty"` // satisfied, partially_satisfied, not_satisfied, na
-	Implementation string   `json:"implementation,omitempty"`
-	Owner          string   `json:"owner,omitempty"`
-	EvidenceRef    string   `json:"evidence_ref,omitempty"`
-	Inherited      bool     `json:"inherited,omitempty"`
-	InheritedFrom  string   `json:"inherited_from,omitempty"`
-	Excluded       bool     `json:"excluded,omitempty"`
-	ExclusionJustification string `json:"exclusion_justification,omitempty"`
-	RiskScore      float64  `json:"risk_score,omitempty"`
-	Dependencies   []string `json:"dependencies,omitempty"`
-	ReviewCadence  string   `json:"review_cadence,omitempty"`
+	ID                     string   `json:"id"`
+	Title                  string   `json:"title,omitempty"`
+	Family                 string   `json:"family,omitempty"`
+	Determination          string   `json:"determination,omitempty"` // satisfied, partially_satisfied, not_satisfied, na
+	Implementation         string   `json:"implementation,omitempty"`
+	Owner                  string   `json:"owner,omitempty"`
+	EvidenceRef            string   `json:"evidence_ref,omitempty"`
+	Inherited              bool     `json:"inherited,omitempty"`
+	InheritedFrom          string   `json:"inherited_from,omitempty"`
+	Excluded               bool     `json:"excluded,omitempty"`
+	ExclusionJustification string   `json:"exclusion_justification,omitempty"`
+	RiskScore              float64  `json:"risk_score,omitempty"`
+	Dependencies           []string `json:"dependencies,omitempty"`
+	ReviewCadence          string   `json:"review_cadence,omitempty"`
 }
 
 // RiskEntry is a single risk from the risk register.
@@ -469,7 +470,7 @@ func writeCSV(cfg PipelineConfig, a ArtifactType, filename string, rows [][]stri
 	if cfg.DryRun {
 		return ArtifactResult{Artifact: a, OutputPath: path, Rows: len(rows) - 1, DryRun: true, Data: rows}
 	}
-	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.OutputDir, 0o750); err != nil {
 		return ArtifactResult{Artifact: a, Error: fmt.Errorf("creating output dir: %w", err)}
 	}
 	f, err := os.Create(path)
@@ -485,10 +486,10 @@ func writeCSV(cfg PipelineConfig, a ArtifactType, filename string, rows [][]stri
 }
 
 func writeFile(dir, filename string, content []byte) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("creating output dir: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, filename), content, 0o644)
+	return os.WriteFile(filepath.Join(dir, filename), content, 0o600)
 }
 
 func controlSeverity(determination string) string {

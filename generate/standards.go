@@ -19,28 +19,28 @@ import (
 // IEC 62443 omits system-card (OT/ICS, not AI context).
 var frameworkArtifactSets = map[string][]ArtifactType{
 	// ISO 27001 variants
-	"iso27001":      {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
-	"iso-27001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
-	"iso_27001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"iso27001":  {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"iso-27001": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"iso_27001": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
 	// ISO 42001 variants
-	"iso42001":      {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
-	"iso-42001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
-	"iso_42001":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	"iso42001":  {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	"iso-42001": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
+	"iso_42001": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, SystemCard, XLSX},
 	// IEC 62443 variants
-	"iec62443":      {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
-	"iec-62443":     {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
-	"iec_62443":     {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"iec62443":  {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"iec-62443": {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"iec_62443": {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
 	// SOC 2 variants
-	"soc2":          {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
-	"soc-2":         {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
-	"soc 2":         {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"soc2":  {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"soc-2": {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
+	"soc 2": {SOA, RiskCSV, EvidenceRegistry, ContextDoc, CollectiveRisk, XLSX},
 	// NIST 800-53 variants
-	"nist800-53":    {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
-	"nist-800-53":   {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
-	"nist_800_53":   {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"nist800-53":  {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"nist-800-53": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"nist_800_53": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
 	// FedRAMP / FINOS CCC variants
-	"fedramp":       {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
-	"finos-ccc":     {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"fedramp":   {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
+	"finos-ccc": {SOA, RiskCSV, EvidenceRegistry, DependencyMap, ContextDoc, CollectiveRisk, XLSX},
 }
 
 // normalizeFrameworkID lowercases and strips common separators to provide a
@@ -110,17 +110,17 @@ func ControlsFromCatalog(cat *artifact.ControlCatalog, existing []ControlEntry) 
 		}
 		// Overlay program-specific data where available.
 		if ex, ok := lookup[ctrl.Id]; ok {
-			entry.Determination          = ex.Determination
-			entry.Implementation         = ex.Implementation
-			entry.Owner                  = ex.Owner
-			entry.EvidenceRef            = ex.EvidenceRef
-			entry.Inherited              = ex.Inherited
-			entry.InheritedFrom          = ex.InheritedFrom
-			entry.Excluded               = ex.Excluded
+			entry.Determination = ex.Determination
+			entry.Implementation = ex.Implementation
+			entry.Owner = ex.Owner
+			entry.EvidenceRef = ex.EvidenceRef
+			entry.Inherited = ex.Inherited
+			entry.InheritedFrom = ex.InheritedFrom
+			entry.Excluded = ex.Excluded
 			entry.ExclusionJustification = ex.ExclusionJustification
-			entry.RiskScore              = ex.RiskScore
-			entry.Dependencies           = ex.Dependencies
-			entry.ReviewCadence          = ex.ReviewCadence
+			entry.RiskScore = ex.RiskScore
+			entry.Dependencies = ex.Dependencies
+			entry.ReviewCadence = ex.ReviewCadence
 			delete(lookup, ctrl.Id)
 		}
 		out = append(out, entry)
