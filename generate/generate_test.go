@@ -115,7 +115,7 @@ func TestFromFile(t *testing.T) {
 	data, _ := json.Marshal(ps)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
-	os.WriteFile(path, data, 0o644) //nolint:errcheck
+	os.WriteFile(path, data, 0o600) //nolint:errcheck
 
 	loaded, err := generate.Load(path)
 	if err != nil {
