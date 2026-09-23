@@ -88,6 +88,24 @@ type RiskEntry struct {
 	RemediationPath string `json:"remediation_path,omitempty"`
 }
 
+// flexTime is a time.Time wrapper whose JSON unmarshaler accepts both
+// RFC 3339 ("2026-01-15T00:00:00Z") and date-only ("2026-01-15") formats.
+type flexTime time.Time
+
+func (ft *flexTime) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			*ft = flexTime(t)
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot parse time %q: expected RFC3339 or YYYY-MM-DD", s)
+}
+
 // ProgramState is the minimal program state formula reads.
 type ProgramState struct {
 	Program     string         `json:"program"`
@@ -95,7 +113,7 @@ type ProgramState struct {
 	ProductName string         `json:"product_name,omitempty"`
 	Scope       string         `json:"scope,omitempty"`
 	Owner       string         `json:"owner,omitempty"`
-	RunDate     *time.Time     `json:"run_date,omitempty"`
+	RunDate     *flexTime      `json:"run_date,omitempty"`
 	Controls    []ControlEntry `json:"controls,omitempty"`
 	Risks       []RiskEntry    `json:"risks,omitempty"`
 }

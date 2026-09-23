@@ -56,9 +56,9 @@ func main() {
 		runStatePath = filepath.Join("runs", *programFlag, "latest.json")
 	}
 
-	ps, err := generate.Load(runStatePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not load run state %q: %v — generating with empty state\n", runStatePath, err)
+	ps, stateErr := generate.Load(runStatePath)
+	if stateErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not load run state %q: %v — generating with empty state\n", runStatePath, stateErr)
 		ps = &generate.ProgramState{Program: *programFlag, Framework: *frameworkFlag}
 	}
 	if *frameworkFlag != "" {
@@ -117,11 +117,17 @@ func main() {
 	default:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
+		stateErrStr := ""
+		if stateErr != nil {
+			stateErrStr = stateErr.Error()
+		}
 		enc.Encode(map[string]interface{}{ //nolint:errcheck
-			"program":    *programFlag,
-			"framework":  cfg.Framework,
-			"output_dir": outputDir,
-			"results":    results,
+			"program":      *programFlag,
+			"framework":    cfg.Framework,
+			"output_dir":   outputDir,
+			"results":      results,
+			"state_loaded": stateErr == nil,
+			"state_error":  stateErrStr,
 		})
 	}
 
