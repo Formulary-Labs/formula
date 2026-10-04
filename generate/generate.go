@@ -119,16 +119,89 @@ type ProgramState struct {
 }
 
 // Load reads a program state from a JSON file.
+// scope may be a string or an object (uses mission / first in_scope entry).
+// Risks are taken from top-level risks or risk_register.items.
 func Load(path string) (*ProgramState, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading program state %q: %w", path, err)
 	}
-	var ps ProgramState
-	if err := json.Unmarshal(data, &ps); err != nil {
+	ps, err := parseProgramState(data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing program state %q: %w", path, err)
 	}
-	return &ps, nil
+	return ps, nil
+}
+
+// parseProgramState unmarshals live and legacy run-state shapes.
+func parseProgramState(data []byte) (*ProgramState, error) {
+	var raw struct {
+		Program      string          `json:"program"`
+		ProgramSlug  string          `json:"program_slug"`
+		ProgramName  string          `json:"program_name"`
+		Framework    string          `json:"framework"`
+		ProductName  string          `json:"product_name"`
+		Owner        string          `json:"owner"`
+		RunDate      *time.Time      `json:"run_date"`
+		Controls     []ControlEntry  `json:"controls"`
+		Risks        []RiskEntry     `json:"risks"`
+		Scope        json.RawMessage `json:"scope"`
+		RiskRegister *struct {
+			Items []RiskEntry `json:"items"`
+		} `json:"risk_register"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	ps := &ProgramState{
+		Program:     firstNonEmpty(raw.Program, raw.ProgramSlug),
+		Framework:   raw.Framework,
+		ProductName: firstNonEmpty(raw.ProductName, raw.ProgramName),
+		Owner:       raw.Owner,
+		RunDate:     raw.RunDate,
+		Controls:    raw.Controls,
+		Risks:       raw.Risks,
+		Scope:       parseScopeField(raw.Scope),
+	}
+	if len(ps.Risks) == 0 && raw.RiskRegister != nil {
+		ps.Risks = raw.RiskRegister.Items
+	}
+	return ps, nil
+}
+
+// parseScopeField accepts a JSON string or an object with mission / in_scope.
+func parseScopeField(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var obj struct {
+		Mission string   `json:"mission"`
+		InScope []string `json:"in_scope"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	if obj.Mission != "" {
+		return obj.Mission
+	}
+	if len(obj.InScope) > 0 {
+		return obj.InScope[0]
+	}
+	return ""
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // ArtifactResult records the output of a single artifact generation.
