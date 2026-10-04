@@ -125,3 +125,55 @@ func TestFromFile(t *testing.T) {
 		t.Errorf("framework = %q, want iso27001", loaded.Framework)
 	}
 }
+
+func TestLoad_scopeObjectAndRiskRegister(t *testing.T) {
+	raw := `{
+		"program_slug": "iso42001",
+		"program_name": "Unified AIMS",
+		"run_date": "2026-07-22T00:00:00Z",
+		"scope": {
+			"mission": "Establish a unified AIMS under ISO 42001",
+			"in_scope": ["Product A", "Product B"]
+		},
+		"risk_register": {
+			"items": [
+				{"id": "RISK-001", "title": "Auditor gap", "severity": "high", "status": "open", "owner": "alex"}
+			]
+		}
+	}`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := generate.Load(path)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if loaded.Program != "iso42001" {
+		t.Errorf("program = %q, want iso42001", loaded.Program)
+	}
+	if !strings.Contains(loaded.Scope, "unified AIMS") {
+		t.Errorf("scope = %q, want mission text", loaded.Scope)
+	}
+	if len(loaded.Risks) != 1 || loaded.Risks[0].ID != "RISK-001" {
+		t.Errorf("risks = %+v, want RISK-001", loaded.Risks)
+	}
+}
+
+func TestLoad_scopeString(t *testing.T) {
+	raw := `{"program":"p","scope":"plain scope string","risks":[{"id":"RISK-002","title":"t","severity":"low","status":"open"}]}`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	os.WriteFile(path, []byte(raw), 0o600) //nolint:errcheck
+	loaded, err := generate.Load(path)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if loaded.Scope != "plain scope string" {
+		t.Errorf("scope = %q", loaded.Scope)
+	}
+	if len(loaded.Risks) != 1 {
+		t.Errorf("risks len = %d", len(loaded.Risks))
+	}
+}
