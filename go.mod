@@ -3,7 +3,7 @@ module github.com/Formulary-Labs/formula
 go 1.26.6
 
 require (
-	github.com/Formulary-Labs/substrate v0.4.0
+	github.com/Formulary-Labs/substrate v0.5.0
 	github.com/xuri/excelize/v2 v2.11.0
 )
 
