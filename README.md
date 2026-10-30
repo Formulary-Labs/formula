@@ -6,9 +6,18 @@ Seven compliance artifacts from one input. Same data in, same files out, every r
 go get github.com/Formulary-Labs/formula
 ```
 
+## In the ecosystem
+
+Formulary is a **pick-and-choose** suite of small, single-purpose CLIs. Install only the tools your workflow needs; each runs standalone. Shared contracts live in [`substrate`](https://github.com/Formulary-Labs/substrate). Optional Make pipelines (or an agent such as `regimen`) compose tools into a run — plug-and-play, not all-or-nothing.
+
+**This tool:** deterministic packet artifacts: SoA, risk CSVs, system card, impact.  
+**Works with:** `compound` cites packet paths; `impact` / `titer` complement.  
+**Pipeline stage:** packet.
+
+
 ## What it does
 
-`formula` generates seven structured compliance artifacts from a `ProgramState` JSON and an optional gemara `ControlCatalog`. It fills every section where the content can be derived from the input data. Sections that require prose judgment — risk narratives, scope descriptions, management review content — are left as `[DATA NEEDED: narrative]` placeholders for the agent layer to complete.
+`formula` generates seven structured compliance artifacts from a `ProgramState` JSON and an optional OSCAL catalog or gemara `ControlCatalog`. It fills every section where the content can be derived from the input data. Sections that require prose judgment — risk narratives, scope descriptions, management review content — are left as `[DATA NEEDED: narrative]` placeholders for the agent layer to complete.
 
 No randomness, no inference, no content that isn't traceable to the input.
 
@@ -53,7 +62,9 @@ generate.PipelineConfig{
 
 ### Framework support
 
-`iso27001`, `iso42001`, `iec62443`. Framework determines which artifact fields are populated and which sections in the Markdown outputs are included.
+`iso27001`, `iso42001`, `iec62443`, `soc2`, `nist800-53`. Framework determines which artifact fields are populated and which sections in the Markdown outputs are included. When both `--catalog` and `--framework` are given, the catalog wins and framework metadata is derived from catalog content.
+
+Use `--artifacts` to generate a subset (comma-separated, e.g. `soa,evidence-registry`); by default all artifacts supported for the framework are generated. `--dry-run` prints the planned writes without writing.
 
 ## ProgramState input
 
@@ -90,7 +101,7 @@ The agent layer (regimen) fills these placeholders using the program's memory, d
 
 ## Catalogs
 
-`formula` can accept a gemara `ControlCatalog` via `--catalog` to derive framework metadata and control titles for artifact generation. See [CATALOGS.md](https://github.com/Formulary-Labs/.github/blob/main/CATALOGS.md) for known upstream catalog sources.
+`formula` accepts an OSCAL catalog or a gemara `ControlCatalog` via `--catalog` to derive framework metadata and control titles for artifact generation. For OSCAL, set `metadata.document-ids[].identifier` to the framework slug. See [CATALOGS.md](https://github.com/Formulary-Labs/.github/blob/main/CATALOGS.md) for known upstream catalog sources.
 
 ## Dry run
 
